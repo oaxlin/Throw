@@ -158,6 +158,10 @@ trace.
 An optional 3rd parameter can be passed which will be used as the "level"
 for any stack traces performed.
 
+=item new
+
+Similar to throw call.  Useful for some cases.
+
 =item croak
 
 Gives a trace from the perspective of the caller.
@@ -273,6 +277,10 @@ Set the level at which to trace.
 Allow all json error stringification to use pretty.  You can also set _pretty => 1 in
 individual errors, but sometimes you won't have access to the error object before
 it stringifies.
+
+=item TO_JSON
+
+JSONifies the error.
 
 =back
 

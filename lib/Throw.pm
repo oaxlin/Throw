@@ -1,6 +1,7 @@
 package Throw;
-
-$VERSION = '0.10';
+use strict;
+use warnings;
+use overload '""' => \&_str, fallback => 1;
 
 =head1 NAME
 
@@ -8,14 +9,12 @@ Throw - Simple exceptions that do the right things in multiple contexts
 
 =cut
 
-use strict;
-use warnings;
-use overload '""' => \&_str, fallback => 1;
-
-our (@EXPORT, $trace, $level, $pretty, $js, $jp) = ('throw');
+our (@EXPORT, $VERSION, $trace, $level, $pretty, $js, $jp) = ('throw');
+$VERSION = '0.10';
 
 sub import {
-    no strict 'refs';  my ($me, $you, $f, $l) = (shift, caller); @_ = @{"$me\::EXPORT"} if !@_;
+    no strict 'refs'; ## no critic
+    my ($me, $you, $f, $l) = (shift, caller); @_ = @{"$me\::EXPORT"} if !@_;
     defined &{"$me\::$_"} ? *{"$you\::$_"} = \&{"$me\::$_"} : die "Cannot export $_ from $me to $you at $f line $l.\n" for @_;
 }
 
@@ -52,7 +51,7 @@ sub _str {
 sub caller_trace {
     my $args = ref($_[0]) ? $_[0] : (!$_[0] || $_[0] !~ /^[123]$/) ? return $_[0]: {verbose => $_[0], level => $_[1]};
     my $i = ($level || $_[1] || $args->{'level'} || 0) + 1;
-    return sprintf "Called from %s at %s line %s", (caller $i+1)[3]||'main', map{s|^(?:.+/)?lib/||;$_} (caller $i)[1,2] if $args->{'verbose'} && $args->{'verbose'} eq '1';
+    return sprintf "Called from %s at %s line %s", (caller $i+1)[3]||'main', map{(my$s=$_)=~s|^(?:.+/)?lib/||;$s} (caller $i)[1,2] if $args->{'verbose'} && $args->{'verbose'} eq '1';
     my ($m1, $m2, $m3, $nv, @trace) = (0, 0, 0, eval {require 5.014} ? ($args->{'verbose'} || '') ne '3' : 1);
     while (1) {
         my ($pkg, $file, $line, $sub, $sargs) = $nv ? ((caller $i++)[0..3], [])
@@ -62,7 +61,10 @@ sub caller_trace {
         next if ($file eq __FILE__) || $args->{'skip'}->{$file} || $args->{'skip'}->{$pkg} || $args->{'skip'}->{$sub};
         splice @$sargs, $args->{'max_args'}, -1, '...' if @$sargs > ($args->{'max_args'} ||= 5);
         my $args = (!@$sargs || $i==2 && $sub eq 'throw') ? ''
-            : ' ('.join(', ',map{$_=!defined($_)?'undef':ref($_)||!/\D/?$_:do{(my$c=$_)=~s|([\'/])|\\$1|g;"'$c'"}; substr($_,0,$args->{'max_arg_len'}||20)} @$sargs).')';
+            : ' ('.join(', ',map{
+                my$d=!defined($_)?'undef':ref($_)||!/\D/?$_:do{(my$c=$_)=~s|([\'/])|\\$1|g;"'$c'"};
+                substr($d,0,$args->{'max_arg_len'}||20)
+            } @$sargs).')';
         $m1 = length $sub  if length($sub)  > $m1;
         $m2 = length $file if length($file) > $m2;
         $m3 = length $line if length($line) > $m3;

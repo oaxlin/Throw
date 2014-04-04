@@ -13,6 +13,6 @@ ok($e =~ /^\x1bmsg/, "Throw::croak()");
 
 
 eval { confess "\x1bmsg\n"; };
-my $e = $@;
+$e = $@;
 cmp_ok(ref $e, 'eq', 'Throw', "Throw::confess() ref check");
 ok($e =~ /^\x1bmsg/, "Throw::confess()");

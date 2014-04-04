@@ -1,5 +1,7 @@
 package Throw;
 
+$VERSION = '0.10';
+
 =head1 NAME
 
 Throw - Simple exceptions that do the right things in multiple contexts

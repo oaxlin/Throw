@@ -1,6 +1,7 @@
 package Throw;
 use strict;
 use warnings;
+require 5.8.8;
 use overload '""' => \&_str, fallback => 1;
 
 =head1 NAME
@@ -10,7 +11,7 @@ Throw - Simple exceptions that do the right things in multiple contexts
 =cut
 
 our (@EXPORT, $VERSION, $trace, $level, $pretty, $js, $jp) = ('throw');
-$VERSION = '0.10';
+$VERSION = '0.11';
 
 sub import {
     no strict 'refs'; ## no critic
@@ -284,4 +285,16 @@ JSONifies the error.
 
 =back
 
-=cut
+=head1 AUTHORS
+
+Paul Seamons <rhandom@cpan.org>, Jason Terry <oaxlin@cpan.org>
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (c) 2013, 2014, Bluehost.com.
+
+This module is free software; you can redistribute it and/or modify it under the same terms as
+Perl itself, either version 5.8.1 or any later version. See L<perlartistic|perlartistic>
+and L<perlgpl|perlgpl>.
+
+The full text of the license can be found in the LICENSE file included with this module.

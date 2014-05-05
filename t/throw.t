@@ -4,15 +4,11 @@ use warnings;
 
 use Throw;
 use Test::More tests => 11;
-use Data::Dumper;
 
-my ($output, $input) = ("", "");
-my $e;
-
-$input = "This is a test.";
+my $input = "This is a test.";
 eval{throw $input};
-$e = $@;
-$output = "$e";
+my $e = $@;
+my $output = "$e";
 cmp_ok(ref $e, 'eq', "Throw", 'Basic Throw is Object.');
 cmp_ok($output, 'eq', $input."\n", 'Basic Test String Passes Compare.');
 

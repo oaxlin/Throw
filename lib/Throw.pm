@@ -10,8 +10,8 @@ Throw - Simple exceptions that do the right things in multiple contexts
 
 =cut
 
-our (@EXPORT, $VERSION, $trace, $level, $pretty, $js, $jp) = ('throw');
-$VERSION = '0.11';
+our (@EXPORT, $trace, $level, $pretty, $js, $jp) = ('throw');
+#VERSION
 
 sub import {
     no strict 'refs'; ## no critic

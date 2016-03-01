@@ -1,8 +1,4 @@
 package Throw;
-use strict;
-use warnings;
-require 5.8.8;
-use overload '""' => \&_str, fallback => 1;
 
 =head1 NAME
 
@@ -10,32 +6,34 @@ Throw - Simple exceptions that do the right things in multiple contexts
 
 =cut
 
-our (@EXPORT, $trace, $level, $pretty, $js, $jp) = ('throw');
-#VERSION
+use strict;
+use warnings;
+use overload '""' => \&_str, fallback => 1;
+
+our ($base_level, $level, $max_args, $max_arg_len, @EXPORT, $trace, $pretty, $js, $jp, %skip) = (0, 0, 5, 20, 'throw');
 
 sub import {
-    no strict 'refs'; ## no critic
-    my ($me, $you, $f, $l) = (shift, caller); @_ = @{"$me\::EXPORT"} if !@_;
+    no strict 'refs';  my ($me, $you, $f, $l) = (shift, caller); @_ = @{"$me\::EXPORT"} if !@_;
     defined &{"$me\::$_"} ? *{"$you\::$_"} = \&{"$me\::$_"} : die "Cannot export $_ from $me to $you at $f line $l.\n" for @_;
 }
 
-sub throw {
-    my $args = ref($_[0]) ? shift() : {%{$_[1]||{}}, error => $_[0]};
-    $args->{'trace'} = caller_trace($trace || $args->{'trace'} || 1, $_[2]) if $trace || $args->{'trace'} || @_>2;
-    die bless $args, __PACKAGE__;
-}
+sub throw   { local $base_level = 1; die __PACKAGE__->new(@_) }
+sub croak   { local ($base_level, $trace) = (2, 1);  die __PACKAGE__->new(@_) } # die from perspective of caller
+sub carp    { local ($base_level, $trace) = (2, 1); warn __PACKAGE__->new(@_) } # warn from caller
+sub confess { local ($base_level, $trace) = (1, 2);  die __PACKAGE__->new(@_) } # die with full trace
+sub cluck   { local ($base_level, $trace) = (1, 2); warn __PACKAGE__->new(@_) } # warn with trace
 
 sub new {
-    my $class = shift;
-    my $args = ref($_[0]) ? shift() : {%{$_[1]||{}}, error => $_[0]};
-    $args->{'trace'} = caller_trace($trace || $args->{'trace'} || 1, $_[2]) if $trace || $args->{'trace'} || @_>2;
-    return bless $args, $class;
+    my ($class, $e, $i, $l) = @_;
+    if (! ref $e) {
+        my %e = %{$i || {}};
+        $e{'_error'} = $e{'error'} if exists $e{'error'};
+        $e{'error'} = $e;
+        $e = \%e;
+    }
+    $e->{'trace'} = caller_trace($trace || $e->{'trace'}, $l) if $trace || $e->{'trace'};
+    return bless $e, $class;
 }
-
-sub croak   { my $a = {%{$_[1]||{}}, error => $_[0]};  $a->{'trace'} = caller_trace(1, ($_[2]||0)+1);  die bless $a, __PACKAGE__ }
-sub carp    { my $a = {%{$_[1]||{}}, error => $_[0]};  $a->{'trace'} = caller_trace(1, ($_[2]||0)+1); warn bless $a, __PACKAGE__ }
-sub confess { my $a = {%{$_[1]||{}}, error => $_[0]};  $a->{'trace'} = caller_trace(2, $_[2]);  die bless $a, __PACKAGE__ }
-sub cluck   { my $a = {%{$_[1]||{}}, error => $_[0]};  $a->{'trace'} = caller_trace(2, $_[2]); warn bless $a, __PACKAGE__ }
 
 sub _str {
     my $self = shift;
@@ -50,22 +48,21 @@ sub _str {
 }
 
 sub caller_trace {
-    my $args = ref($_[0]) ? $_[0] : (!$_[0] || $_[0] !~ /^[123]$/) ? return $_[0]: {verbose => $_[0], level => $_[1]};
-    my $i = ($level || $_[1] || $args->{'level'} || 0) + 1;
-    return sprintf "Called from %s at %s line %s", (caller $i+1)[3]||'main', map{(my$s=$_)=~s|^(?:.+/)?lib/||;$s} (caller $i)[1,2] if $args->{'verbose'} && $args->{'verbose'} eq '1';
-    my ($m1, $m2, $m3, $nv, @trace) = (0, 0, 0, eval {require 5.014} ? ($args->{'verbose'} || '') ne '3' : 1);
+    my ($verbose, $lev) = @_;
+    return $verbose if $verbose !~ /^[123]$/;
+    my $i = ($lev || $level) + $base_level + 1;
+    return sprintf "Called from %s at %s line %s", (caller $i+1)[3]||'main', map{s|^(?:.+/)?lib/||;$_} (caller $i)[1,2] if $verbose && $verbose eq '1';
+    my ($m1, $m2, $m3, $lpkg, $nv, @trace) = (0, 0, 0, __PACKAGE__, eval {require 5.014} ? $verbose ne '3' : 1);
     while (1) {
-        my ($pkg, $file, $line, $sub, $sargs) = $nv ? ((caller $i++)[0..3], [])
-            : do { package DB;  local $DB::args[0] = \$nv; ((caller $i++)[0..3], ($DB::args[0]||'') ne \$nv ? [@DB::args] : []) };
-        last if ! $sargs;
+        my ($pkg, $file, $line, $sub, $args) = $nv ? ((caller $i++)[0..3], [])
+            : do { package DB; local $DB::args[0] = \$nv; ((caller $i++)[0..3], ($DB::args[0]||'') ne \$nv ? [@DB::args] : []) };
+        last if ! $sub;
+        $args = [] if $lpkg eq __PACKAGE__;
+        $lpkg = $pkg;
         $sub =~ s/.*://; $file =~ s|^(?:.+/)?lib/||;
-        next if ($file eq __FILE__) || $args->{'skip'}->{$file} || $args->{'skip'}->{$pkg} || $args->{'skip'}->{$sub};
-        splice @$sargs, $args->{'max_args'}, -1, '...' if @$sargs > ($args->{'max_args'} ||= 5);
-        my $args = (!@$sargs || $i==2 && $sub eq 'throw') ? ''
-            : ' ('.join(', ',map{
-                my$d=!defined($_)?'undef':ref($_)||!/\D/?$_:do{(my$c=$_)=~s|([\'/])|\\$1|g;"'$c'"};
-                substr($d,0,$args->{'max_arg_len'}||20)
-            } @$sargs).')';
+        next if ($file eq __FILE__) || $skip{$file} || $skip{$pkg} || $skip{$sub};
+        splice @$args, $max_args, -1, '...' if @$args > $max_args;
+        $args = !@$args ? '' : ' ('.join(', ',map{$_=!defined($_)?'undef':ref($_)||!/\D/?$_:do{(my$c=$_)=~s|([\'/])|\\$1|g;"'$c'"}; substr($_,0,$max_arg_len)} @$args).')';
         $m1 = length $sub  if length($sub)  > $m1;
         $m2 = length $file if length($file) > $m2;
         $m3 = length $line if length($line) > $m3;
@@ -102,7 +99,15 @@ __END__
 
     throw "Hey";
 
+    # "$@" eq "Hey\n";
+    # JSON->new->allow_blessed(1)->convert_blessed(1)->encode($e) eq '{"error":"Hey"}'
+
+
     throw "Hey", {info => "This is why"};
+
+    # "$@" eq "Hey: {\"info\":\"This is why\"}\n"
+    # json->encode eq '{"info":"This is why","error":"Hey"}'
+
 
     throw "Hey", {trace => 1}; # simple trace
 
@@ -134,6 +139,10 @@ information than just the error message.  These exceptions do the
 right thing when thrown on the commandline, or when consumed by
 javascript based APIs.
 
+Internally the die is stored as a hash with the error message set
+as the hash key named "error" (if a hash key named error is also
+passed in the hash, it will be renamed to _error).
+
 =head1 METHODS
 
 =over 4
@@ -150,7 +159,7 @@ will be added to it.  If just an error message is passed, a hashref
 will be created with the error as the single key.
 
 In all cases, throw returns an hashref based object blessed into the
-Throw class.  When an error message is passed independently.
+Throw class.
 
 If a key of "trace" is passed, its value will be passed to the
 caller_trace subroutine and the result will be stored as the value of
@@ -158,10 +167,6 @@ trace.
 
 An optional 3rd parameter can be passed which will be used as the "level"
 for any stack traces performed.
-
-=item new
-
-Similar to throw call.  Useful for some cases.
 
 =item croak
 
@@ -279,22 +284,6 @@ Allow all json error stringification to use pretty.  You can also set _pretty =>
 individual errors, but sometimes you won't have access to the error object before
 it stringifies.
 
-=item TO_JSON
-
-JSONifies the error.
-
 =back
 
-=head1 AUTHORS
-
-Paul Seamons <rhandom@cpan.org>, Jason Terry <oaxlin@cpan.org>
-
-=head1 LICENSE AND COPYRIGHT
-
-Copyright (c) 2013, 2014, Bluehost.com.
-
-This module is free software; you can redistribute it and/or modify it under the same terms as
-Perl itself, either version 5.8.1 or any later version. See L<perlartistic|perlartistic>
-and L<perlgpl|perlgpl>.
-
-The full text of the license can be found in the LICENSE file included with this module.
+=cut
